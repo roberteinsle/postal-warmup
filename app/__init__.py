@@ -118,6 +118,223 @@ def register_blueprints(app):
         """Health check endpoint"""
         return {'status': 'healthy'}, 200
 
+    @app.route('/debug/config')
+    def debug_config():
+        """Debug endpoint to show configuration (development only)"""
+        if app.config.get('FLASK_ENV') != 'development':
+            return {'error': 'Only available in development mode'}, 403
+
+        return {
+            'environment': app.config.get('FLASK_ENV'),
+            'debug': app.config.get('DEBUG'),
+            'database': app.config.get('SQLALCHEMY_DATABASE_URI'),
+            'postal_url': app.config.get('POSTAL_BASE_URL'),
+            'postal_api_configured': bool(app.config.get('POSTAL_API_KEY')),
+            'openai_api_configured': bool(app.config.get('OPENAI_API_KEY')),
+            'imap_host': f"{app.config.get('IMAP_HOST')}:{app.config.get('IMAP_PORT')}",
+            'sender_addresses': app.config.get('SENDER_ADDRESSES'),
+            'recipient_addresses': app.config.get('RECIPIENT_ADDRESSES'),
+            'daily_send_time': app.config.get('DAILY_SEND_TIME'),
+            'check_delay_minutes': app.config.get('CHECK_DELAY_MINUTES')
+        }
+
+    @app.route('/debug/database')
+    def debug_database():
+        """Debug endpoint to show database statistics"""
+        from app.models import db, Email, WarmupSchedule, EmailAddress, Statistic
+
+        try:
+            stats = {
+                'emails': Email.query.count(),
+                'warmup_schedule_days': WarmupSchedule.query.count(),
+                'email_addresses': EmailAddress.query.count(),
+                'statistics_records': Statistic.query.count(),
+                'database_file': app.config.get('SQLALCHEMY_DATABASE_URI')
+            }
+
+            # Get first 5 warmup schedule entries
+            schedules = WarmupSchedule.query.order_by(WarmupSchedule.day).limit(5).all()
+            stats['warmup_schedule_preview'] = [
+                {
+                    'day': s.day,
+                    'target_emails': s.target_emails,
+                    'enabled': s.enabled
+                }
+                for s in schedules
+            ]
+
+            # Get email addresses
+            addresses = EmailAddress.query.all()
+            stats['email_addresses_list'] = [
+                {
+                    'email': a.email,
+                    'type': a.type,
+                    'verified': a.verified
+                }
+                for a in addresses
+            ]
+
+            return stats
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/send-email', methods=['POST'])
+    def test_send_email():
+        """Test endpoint to send a single email"""
+        from app.core.email_sender import PostalEmailSender
+        from app.core.content_generator import EmailContentGenerator
+        from flask import request
+
+        try:
+            # Get parameters
+            data = request.get_json() or {}
+            sender = data.get('sender', app.config.get('SENDER_ADDRESSES', [''])[0])
+            recipient = data.get('recipient', app.config.get('RECIPIENT_ADDRESSES', [''])[0])
+            content_type = data.get('content_type', 'mixed')
+
+            # Initialize services
+            postal_sender = PostalEmailSender(
+                app.config.get('POSTAL_API_KEY'),
+                app.config.get('POSTAL_BASE_URL')
+            )
+
+            content_generator = EmailContentGenerator(
+                app.config.get('OPENAI_API_KEY')
+            )
+
+            # Generate content
+            subject, body = content_generator.generate_email(content_type)
+
+            # Send email
+            result = postal_sender.send_email(sender, recipient, subject, body)
+
+            return {
+                'success': result['success'],
+                'message_id': result.get('message_id'),
+                'sender': sender,
+                'recipient': recipient,
+                'subject': subject,
+                'body': body[:100] + '...' if len(body) > 100 else body,
+                'content_type': content_type,
+                'result': result
+            }
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/check-email', methods=['POST'])
+    def test_check_email():
+        """Test endpoint to check email delivery"""
+        from app.core.email_checker import IMAPEmailChecker
+        from flask import request
+
+        try:
+            # Get parameters
+            data = request.get_json() or {}
+            email_address = data.get('email', app.config.get('RECIPIENT_ADDRESSES', [''])[0])
+            password = app.config.get('RECIPIENT_IMAP_PASSWORDS', {}).get(email_address, '')
+            subject = data.get('subject')
+            message_id = data.get('message_id')
+
+            if not password:
+                return {'error': f'No IMAP password configured for {email_address}'}, 400
+
+            # Initialize checker
+            checker = IMAPEmailChecker(
+                app.config.get('IMAP_HOST'),
+                app.config.get('IMAP_PORT'),
+                app.config.get('IMAP_USE_SSL')
+            )
+
+            # Check email
+            result = checker.check_email(email_address, password, message_id, subject)
+
+            return {
+                'email': email_address,
+                'result': result
+            }
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/full-cycle', methods=['POST'])
+    def test_full_cycle():
+        """Test endpoint for full send + check cycle"""
+        from app.core.email_sender import PostalEmailSender
+        from app.core.content_generator import EmailContentGenerator
+        from app.core.email_checker import IMAPEmailChecker
+        from flask import request
+        import time
+
+        try:
+            # Get parameters
+            data = request.get_json() or {}
+            sender = data.get('sender', app.config.get('SENDER_ADDRESSES', [''])[0])
+            recipient = data.get('recipient', app.config.get('RECIPIENT_ADDRESSES', [''])[0])
+            content_type = data.get('content_type', 'mixed')
+            check_delay = data.get('check_delay', 30)  # seconds
+
+            # Initialize services
+            postal_sender = PostalEmailSender(
+                app.config.get('POSTAL_API_KEY'),
+                app.config.get('POSTAL_BASE_URL')
+            )
+
+            content_generator = EmailContentGenerator(
+                app.config.get('OPENAI_API_KEY')
+            )
+
+            checker = IMAPEmailChecker(
+                app.config.get('IMAP_HOST'),
+                app.config.get('IMAP_PORT'),
+                app.config.get('IMAP_USE_SSL')
+            )
+
+            # Step 1: Generate content
+            subject, body = content_generator.generate_email(content_type)
+
+            # Step 2: Send email
+            send_result = postal_sender.send_email(sender, recipient, subject, body)
+
+            if not send_result['success']:
+                return {
+                    'success': False,
+                    'step': 'send',
+                    'error': send_result.get('error'),
+                    'result': send_result
+                }, 500
+
+            # Step 3: Wait before checking
+            app.logger.info(f"Waiting {check_delay}s before checking...")
+            time.sleep(check_delay)
+
+            # Step 4: Check delivery
+            password = app.config.get('RECIPIENT_IMAP_PASSWORDS', {}).get(recipient, '')
+            if not password:
+                return {
+                    'success': True,
+                    'step': 'check_skipped',
+                    'message': f'No IMAP password for {recipient}',
+                    'send_result': send_result
+                }
+
+            check_result = checker.check_email(recipient, password, None, subject)
+
+            return {
+                'success': True,
+                'sender': sender,
+                'recipient': recipient,
+                'subject': subject,
+                'content_type': content_type,
+                'send_result': send_result,
+                'check_result': check_result,
+                'delivery_status': check_result.get('delivery_status'),
+                'found_in_folder': check_result.get('folder')
+            }
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
 
 def initialize_scheduler(app):
     """

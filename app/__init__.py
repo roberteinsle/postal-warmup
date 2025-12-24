@@ -91,27 +91,15 @@ def register_blueprints(app):
     Args:
         app: Flask application instance
     """
-    # Import blueprints (will be created in next phase)
-    # from app.api.dashboard import dashboard_bp
-    # from app.api.emails import emails_bp
-    # from app.api.schedule import schedule_bp
-    # from app.api.settings import settings_bp
+    # Import blueprints
+    from app.api.dashboard import dashboard_bp
+    from app.api.emails import emails_bp
+    from app.api.schedule import schedule_bp
 
     # Register blueprints
-    # app.register_blueprint(dashboard_bp)
-    # app.register_blueprint(emails_bp, url_prefix='/api/emails')
-    # app.register_blueprint(schedule_bp, url_prefix='/api/schedule')
-    # app.register_blueprint(settings_bp, url_prefix='/api/settings')
-
-    # Placeholder route for now
-    @app.route('/')
-    def index():
-        return {
-            'status': 'ok',
-            'app': app.config.get('APP_NAME'),
-            'version': app.config.get('APP_VERSION'),
-            'message': 'Postal Warmup API is running'
-        }
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(emails_bp, url_prefix='/emails')
+    app.register_blueprint(schedule_bp, url_prefix='/schedule')
 
     @app.route('/health')
     def health():

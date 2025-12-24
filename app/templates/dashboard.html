@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Postal Warmup{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- Warmup Progress -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Warmup Fortschritt</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6>Tag <span id="warmup-current-day">-</span> von <span id="warmup-total-days">-</span></h6>
+                        <div class="progress" style="height: 30px;">
+                            <div id="warmup-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">
+                                0%
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <p class="mb-1">
+                                <strong>Heute:</strong>
+                                <span id="today-sent">0</span> / <span id="today-target">0</span> Emails gesendet
+                                <span id="today-status-badge" class="badge bg-secondary ms-2">Ausstehend</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <button class="btn btn-success btn-lg mb-2" onclick="sendManualBatch()">
+                            <i class="bi bi-send"></i> Manuell Senden
+                        </button>
+                        <br>
+                        <button class="btn btn-info" onclick="checkPendingEmails()">
+                            <i class="bi bi-arrow-clockwise"></i> Emails Prüfen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <!-- Total Sent -->
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-envelope"></i> Gesamt Gesendet</h6>
+                <h2 class="mb-0" id="stat-total-sent">0</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inbox Rate -->
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-inbox"></i> Inbox Rate</h6>
+                <h2 class="mb-0" id="stat-inbox-rate">0%</h2>
+                <small><span id="stat-total-inbox">0</span> Emails</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spam Rate -->
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-exclamation-triangle"></i> Spam Rate</h6>
+                <h2 class="mb-0" id="stat-spam-rate">0%</h2>
+                <small><span id="stat-total-spam">0</span> Emails</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending -->
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-white bg-secondary">
+            <div class="card-body">
+                <h6 class="card-title"><i class="bi bi-hourglass-split"></i> Ausstehend</h6>
+                <h2 class="mb-0" id="stat-pending">0</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <!-- Email Volume Chart -->
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Email-Volumen (7 Tage)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="volumeChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Rate Chart -->
+    <div class="col-md-6 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Erfolgsrate (7 Tage)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="successChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Emails -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Letzte Emails</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="recent-emails-table">
+                        <thead>
+                            <tr>
+                                <th>Zeitpunkt</th>
+                                <th>Von</th>
+                                <th>An</th>
+                                <th>Betreff</th>
+                                <th>Typ</th>
+                                <th>Status</th>
+                                <th>Zustellung</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-emails-body">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">
+                                    <i class="bi bi-hourglass-split"></i> Lade Daten...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-end">
+                    <a href="/emails" class="btn btn-sm btn-outline-primary">
+                        Alle Emails anzeigen <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scheduler Status -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Scheduler Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="scheduler-status">
+                    <i class="bi bi-hourglass-split"></i> Lade Status...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

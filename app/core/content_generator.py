@@ -23,22 +23,22 @@ class EmailContentGenerator:
         self.client = OpenAI(api_key=api_key)
         self.model = "gpt-3.5-turbo"  # Cost-effective model
 
-        # Fallback templates for when API fails
+        # Fallback templates for when API fails (German)
         self.fallback_templates = {
             'transactional': [
-                ("Order Confirmation", "Your order has been confirmed and will be shipped soon."),
-                ("Password Reset", "We received a request to reset your password."),
-                ("Account Verification", "Please verify your email address to complete registration."),
+                ("Bestellbestätigung", "Ihre Bestellung wurde bestätigt und wird in Kürze versandt."),
+                ("Passwort zurücksetzen", "Wir haben eine Anfrage zum Zurücksetzen Ihres Passworts erhalten."),
+                ("Konto-Verifizierung", "Bitte bestätigen Sie Ihre E-Mail-Adresse, um die Registrierung abzuschließen."),
             ],
             'newsletter': [
-                ("Monthly Update", "Here's what's new this month with our service."),
-                ("Tips and Tricks", "Discover new ways to get the most out of our platform."),
-                ("Community Highlights", "See what our community has been up to this week."),
+                ("Monatliches Update", "Hier sind die Neuigkeiten dieses Monats von unserem Service."),
+                ("Tipps und Tricks", "Entdecken Sie neue Wege, um das Beste aus unserer Plattform herauszuholen."),
+                ("Community-Highlights", "Sehen Sie, was unsere Community diese Woche gemacht hat."),
             ],
             'personal': [
-                ("Quick Question", "I hope this email finds you well. I wanted to reach out about..."),
-                ("Following Up", "Just wanted to follow up on our previous conversation."),
-                ("Thank You", "I wanted to take a moment to thank you for your help."),
+                ("Kurze Frage", "Ich hoffe, es geht Ihnen gut. Ich wollte mich bezüglich... melden."),
+                ("Nachfassen", "Ich wollte nur kurz zu unserem letzten Gespräch nachfassen."),
+                ("Vielen Dank", "Ich wollte mir einen Moment Zeit nehmen, um mich für Ihre Hilfe zu bedanken."),
             ]
         }
 
@@ -77,26 +77,26 @@ class EmailContentGenerator:
         """
         # Create appropriate prompt based on content type
         prompts = {
-            'transactional': """Generate a professional transactional email.
-            Examples: order confirmation, password reset, account verification, shipping notification.
-            Keep it concise (2-3 sentences) and professional.
-            Return ONLY in this format:
-            SUBJECT: [subject line]
-            BODY: [email body]""",
+            'transactional': """Generiere eine professionelle Transaktions-E-Mail auf Deutsch.
+            Beispiele: Bestellbestätigung, Passwort zurücksetzen, Kontobestätigung, Versandbenachrichtigung.
+            Halte es prägnant (2-3 Sätze) und professionell.
+            Antworte NUR in diesem Format:
+            SUBJECT: [Betreffzeile]
+            BODY: [E-Mail-Text]""",
 
-            'newsletter': """Generate a friendly newsletter-style email.
-            Topics: product updates, tips, community news, feature announcements.
-            Keep it engaging but brief (3-4 sentences).
-            Return ONLY in this format:
-            SUBJECT: [subject line]
-            BODY: [email body]""",
+            'newsletter': """Generiere eine freundliche Newsletter-E-Mail auf Deutsch.
+            Themen: Produktupdates, Tipps, Community-News, Feature-Ankündigungen.
+            Halte es ansprechend aber kurz (3-4 Sätze).
+            Antworte NUR in diesem Format:
+            SUBJECT: [Betreffzeile]
+            BODY: [E-Mail-Text]""",
 
-            'personal': """Generate a casual, personal email.
-            Topics: quick questions, follow-ups, thank you notes, friendly check-ins.
-            Keep it warm and conversational (2-3 sentences).
-            Return ONLY in this format:
-            SUBJECT: [subject line]
-            BODY: [email body]"""
+            'personal': """Generiere eine lockere, persönliche E-Mail auf Deutsch.
+            Themen: Kurze Fragen, Follow-ups, Danksagungen, freundliche Check-ins.
+            Halte es warm und gesprächig (2-3 Sätze).
+            Antworte NUR in diesem Format:
+            SUBJECT: [Betreffzeile]
+            BODY: [E-Mail-Text]"""
         }
 
         prompt = prompts.get(content_type, prompts['personal'])
@@ -105,7 +105,7 @@ class EmailContentGenerator:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that generates realistic email content."},
+                {"role": "system", "content": "Du bist ein hilfreicher Assistent, der realistische E-Mail-Inhalte auf Deutsch generiert."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=200,

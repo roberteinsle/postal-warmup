@@ -335,6 +335,86 @@ def register_blueprints(app):
         except Exception as e:
             return {'error': str(e)}, 500
 
+    @app.route('/test/batch-send', methods=['POST'])
+    def test_batch_send():
+        """Test endpoint for batch sending via warmup scheduler"""
+        from flask import request
+
+        try:
+            # Get parameters
+            data = request.get_json() or {}
+            count = data.get('count', 3)  # Default: 3 emails
+            senders = data.get('senders')
+            recipients = data.get('recipients')
+
+            # Get warmup scheduler from app config
+            warmup_scheduler = app.config.get('WARMUP_SCHEDULER')
+            if not warmup_scheduler:
+                return {'error': 'Warmup scheduler not initialized'}, 500
+
+            # Trigger manual send
+            result = warmup_scheduler.trigger_manual_send(
+                count=count,
+                senders=senders,
+                recipients=recipients
+            )
+
+            return result
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/check-pending', methods=['POST'])
+    def test_check_pending():
+        """Test endpoint to manually trigger pending email checks"""
+        try:
+            # Get warmup scheduler from app config
+            warmup_scheduler = app.config.get('WARMUP_SCHEDULER')
+            if not warmup_scheduler:
+                return {'error': 'Warmup scheduler not initialized'}, 500
+
+            # Check pending emails
+            result = warmup_scheduler.check_pending_emails()
+
+            return result
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/warmup-progress', methods=['GET'])
+    def test_warmup_progress():
+        """Test endpoint to get current warmup progress"""
+        try:
+            # Get warmup scheduler from app config
+            warmup_scheduler = app.config.get('WARMUP_SCHEDULER')
+            if not warmup_scheduler:
+                return {'error': 'Warmup scheduler not initialized'}, 500
+
+            # Get progress
+            progress = warmup_scheduler.get_warmup_progress()
+
+            return progress
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+    @app.route('/test/daily-batch', methods=['POST'])
+    def test_daily_batch():
+        """Test endpoint to manually trigger daily batch"""
+        try:
+            # Get warmup scheduler from app config
+            warmup_scheduler = app.config.get('WARMUP_SCHEDULER')
+            if not warmup_scheduler:
+                return {'error': 'Warmup scheduler not initialized'}, 500
+
+            # Send daily batch
+            result = warmup_scheduler.send_daily_batch()
+
+            return result
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
 
 def initialize_scheduler(app):
     """
@@ -345,34 +425,41 @@ def initialize_scheduler(app):
     """
     from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from app.core.warmup_scheduler import WarmupScheduler
     import atexit
 
     scheduler = BackgroundScheduler()
+    warmup_scheduler = WarmupScheduler(app)
 
     # Parse DAILY_SEND_TIME (format: "HH:MM")
     send_time = app.config.get('DAILY_SEND_TIME', '09:00')
     hour, minute = send_time.split(':')
 
-    # Schedule daily warmup task
-    # This will be implemented in Phase 3 (Scheduler)
-    # For now, just set up the scheduler infrastructure
+    # Schedule daily warmup batch
+    scheduler.add_job(
+        func=warmup_scheduler.send_daily_batch,
+        trigger=CronTrigger(hour=int(hour), minute=int(minute)),
+        id='daily_warmup',
+        name='Daily Warmup Email Batch',
+        replace_existing=True
+    )
 
-    # Placeholder for future scheduled jobs
-    # from app.core.warmup_scheduler import WarmupScheduler
-    # warmup_scheduler = WarmupScheduler(app)
-    # scheduler.add_job(
-    #     func=warmup_scheduler.send_daily_batch,
-    #     trigger=CronTrigger(hour=int(hour), minute=int(minute)),
-    #     id='daily_warmup',
-    #     name='Daily Warmup Email Batch',
-    #     replace_existing=True
-    # )
+    # Schedule email checking every 30 minutes
+    scheduler.add_job(
+        func=warmup_scheduler.check_pending_emails,
+        trigger='interval',
+        minutes=30,
+        id='check_emails',
+        name='Check Pending Email Delivery',
+        replace_existing=True
+    )
 
     scheduler.start()
-    app.logger.info(f"APScheduler started (daily task at {send_time})")
+    app.logger.info(f"APScheduler started (daily warmup at {send_time}, email checks every 30min)")
 
-    # Store scheduler in app config for access
+    # Store scheduler and warmup_scheduler in app config for access
     app.config['SCHEDULER'] = scheduler
+    app.config['WARMUP_SCHEDULER'] = warmup_scheduler
 
     # Shutdown scheduler when app exits
     atexit.register(lambda: scheduler.shutdown())
